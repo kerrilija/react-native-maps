@@ -318,67 +318,63 @@ public class MapMarker extends MapFeature {
     animator.start();
   }
 
-  public void setImage(String uri) {
-
+public void setImage(String uri) {
     boolean shouldLoadImage = true;
 
     if (this.markerManager != null) {
-      // remove marker from previous shared icon if needed, to avoid future updates from it.
-      // remove the shared icon completely if no markers on it as well.
-      // this is to avoid memory leak due to orphan bitmaps.
-      //
-      // However in case where client want to update all markers from icon A to icon B
-      // and after some time to update back from icon B to icon A
-      // it may be better to keep it though. We assume that is rare.
-      if (this.imageUri != null) {
-        this.markerManager.getSharedIcon(this.imageUri).removeMarker(this);
-        this.markerManager.removeSharedIconIfEmpty(this.imageUri);
-      }
-      if (uri != null) {
-        // listening for marker bitmap descriptor update, as well as check whether to load the image.
-        MapMarkerManager.AirMapMarkerSharedIcon sharedIcon = this.markerManager.getSharedIcon(uri);
-        sharedIcon.addMarker(this);
-        shouldLoadImage = sharedIcon.shouldLoadImage();
-      }
+        // Remove previous shared icons if applicable
+        if (this.imageUri != null) {
+            this.markerManager.getSharedIcon(this.imageUri).removeMarker(this);
+            this.markerManager.removeSharedIconIfEmpty(this.imageUri);
+        }
+        if (uri != null) {
+            MapMarkerManager.AirMapMarkerSharedIcon sharedIcon = this.markerManager.getSharedIcon(uri);
+            sharedIcon.addMarker(this);
+            shouldLoadImage = sharedIcon.shouldLoadImage();
+        }
     }
 
     this.imageUri = uri;
-    if (!shouldLoadImage) {return;}
+    if (!shouldLoadImage) {
+        return;
+    }
 
     if (uri == null) {
-      iconBitmapDescriptor = null;
-      update(true);
+        iconBitmapDescriptor = null;
+        update(true);
     } else if (uri.startsWith("http://") || uri.startsWith("https://") ||
-        uri.startsWith("file://") || uri.startsWith("asset://") || uri.startsWith("data:")) {
-      ImageRequest imageRequest = ImageRequestBuilder
-          .newBuilderWithSource(Uri.parse(uri))
-          .build();
+            uri.startsWith("file://") || uri.startsWith("asset://") || uri.startsWith("data:")) {
+        // Load remote or asset-based image
+        ImageRequest imageRequest = ImageRequestBuilder
+                .newBuilderWithSource(Uri.parse(uri))
+                .build();
 
-      ImagePipeline imagePipeline = Fresco.getImagePipeline();
-      dataSource = imagePipeline.fetchDecodedImage(imageRequest, this);
-      DraweeController controller = Fresco.newDraweeControllerBuilder()
-          .setImageRequest(imageRequest)
-          .setControllerListener(mLogoControllerListener)
-          .setOldController(logoHolder.getController())
-          .build();
-      logoHolder.setController(controller);
+        ImagePipeline imagePipeline = Fresco.getImagePipeline();
+        dataSource = imagePipeline.fetchDecodedImage(imageRequest, this);
+        DraweeController controller = Fresco.newDraweeControllerBuilder()
+                .setImageRequest(imageRequest)
+                .setControllerListener(mLogoControllerListener)
+                .setOldController(logoHolder.getController())
+                .build();
+        logoHolder.setController(controller);
     } else {
-      iconBitmapDescriptor = getBitmapDescriptorByName(uri);
-      int drawableId = getDrawableResourceByName(uri);
-      iconBitmap = BitmapFactory.decodeResource(getResources(), drawableId);
-      if (iconBitmap == null) { // VectorDrawable or similar
-          Drawable drawable = getResources().getDrawable(drawableId);
-          iconBitmap = Bitmap.createBitmap(drawable.getIntrinsicWidth(), drawable.getIntrinsicHeight(), Bitmap.Config.ARGB_8888);
-          drawable.setBounds(0, 0, drawable.getIntrinsicWidth(), drawable.getIntrinsicHeight());
-          Canvas canvas = new Canvas(iconBitmap);
-          drawable.draw(canvas);
-      }
-      if (this.markerManager != null) {
-        this.markerManager.getSharedIcon(uri).updateIcon(iconBitmapDescriptor, iconBitmap);
-      }
-      update(true);
+        // Load local drawable and scale it
+        iconBitmapDescriptor = getBitmapDescriptorByName(uri);
+        int drawableId = getDrawableResourceByName(uri);
+        iconBitmap = BitmapFactory.decodeResource(getResources(), drawableId);
+        if (iconBitmap == null) { // For VectorDrawable or similar
+            Drawable drawable = getResources().getDrawable(drawableId);
+            iconBitmap = Bitmap.createBitmap(drawable.getIntrinsicWidth() * 2, drawable.getIntrinsicHeight() * 2, Bitmap.Config.ARGB_8888);
+            drawable.setBounds(0, 0, drawable.getIntrinsicWidth() * 2, drawable.getIntrinsicHeight() * 2); // Scale up by 2x
+            Canvas canvas = new Canvas(iconBitmap);
+            drawable.draw(canvas);
+        }
+        if (this.markerManager != null) {
+            this.markerManager.getSharedIcon(uri).updateIcon(iconBitmapDescriptor, iconBitmap);
+        }
+        update(true);
     }
-  }
+}
 
   public void setIconBitmapDescriptor(BitmapDescriptor bitmapDescriptor, Bitmap bitmap) {
     this.iconBitmapDescriptor = bitmapDescriptor;
@@ -521,29 +517,31 @@ public class MapMarker extends MapFeature {
     mLastBitmapCreated = null;
   }
 
-  private Bitmap createDrawable() {
-    int width = this.width <= 0 ? 100 : this.width;
-    int height = this.height <= 0 ? 100 : this.height;
+private Bitmap createDrawable() {
+    // Set a default large width and height for unconstrained markers
+    int width = this.width <= 0 ? 200 : this.width; // Increased default width to 200
+    int height = this.height <= 0 ? 200 : this.height; // Increased default height to 200
     this.buildDrawingCache();
 
-    // Do not create the doublebuffer-bitmap each time. reuse it to save memory.
+    // Reuse or recreate the bitmap for efficiency
     Bitmap bitmap = mLastBitmapCreated;
 
     if (bitmap == null ||
             bitmap.isRecycled() ||
             bitmap.getWidth() != width ||
             bitmap.getHeight() != height) {
-      bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
-      mLastBitmapCreated = bitmap;
+        bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
+        mLastBitmapCreated = bitmap;
     } else {
-      bitmap.eraseColor(Color.TRANSPARENT);
+        bitmap.eraseColor(Color.TRANSPARENT);
     }
 
+    // Draw the marker onto the canvas
     Canvas canvas = new Canvas(bitmap);
     this.draw(canvas);
 
     return bitmap;
-  }
+}
 
   public void setCalloutView(MapCallout view) {
     this.calloutView = view;
@@ -622,4 +620,9 @@ public class MapMarker extends MapFeature {
     return BitmapDescriptorFactory.fromResource(getDrawableResourceByName(name));
   }
 
+  public void setCustomSize(int customWidth, int customHeight) {
+    this.width = customWidth;
+    this.height = customHeight;
+    update(true); // Trigger an update with the new size
+}
 }

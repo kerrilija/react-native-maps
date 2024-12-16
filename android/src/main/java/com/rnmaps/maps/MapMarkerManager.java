@@ -365,4 +365,11 @@ public class MapMarkerManager extends ViewGroupManager<MapMarker> {
         float height = data.get("height");
         view.update((int) width, (int) height);
     }
+
+    @ReactProp(name = "customSize")
+    public void setCustomSize(MapMarker view, ReadableMap size) {
+        int width = size.hasKey("width") ? size.getInt("width") : 100; // Default to 100 if not provided
+        int height = size.hasKey("height") ? size.getInt("height") : 100; // Default to 100 if not provided
+        view.setCustomSize(width, height);
+    }
 }
